@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CBCT Tooth Segmentation Viewer</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0f1117; color:#e0e0e0; font-family:system-ui,sans-serif; height:100vh; overflow:hidden; }
+
+  /* ── file picker overlay ── */
+  #picker {
+    position:fixed; inset:0; background:#0f1117; z-index:200;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+  }
+  #picker h1 { font-size:22px; color:#7eb3f7; }
+  #picker p  { font-size:13px; color:#666; }
+  .file-box {
+    background:#13151f; border:1px solid #2a2d3a; border-radius:10px;
+    padding:20px 32px; width:380px; display:flex; flex-direction:column; gap:10px;
+  }
+  .file-row { display:flex; flex-direction:column; gap:4px; }
+  .file-row label { font-size:11px; color:#888; }
+  .file-row input { font-size:12px; color:#ccc; }
+  #go-btn {
+    width:100%; padding:10px; background:#1e3a5f; border:1px solid #2a5298;
+    color:#7eb3f7; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600;
+    transition:background .15s;
+  }
+  #go-btn:hover { background:#2a4a7f; }
+  #go-btn:disabled { opacity:0.4; cursor:default; }
+  #pick-status { font-size:12px; color:#e24b4a; min-height:18px; }
+  #pick-prog { width:380px; }
+  #pb { width:100%; height:3px; background:#1e2130; border-radius:2px; overflow:hidden; display:none; }
+  #pf { height:100%; background:#5b8dee; width:0%; transition:width .3s; }
+  #pmsg { font-size:11px; color:#666; margin-top:6px; }
+
+  /* ── main app ── */
+  #app { display:grid; grid-template-columns:240px 1fr; grid-template-rows:44px 1fr; height:100vh; display:none; }
+
+  #topbar {
+    grid-column:1/-1; background:#1a1d27; border-bottom:1px solid #2a2d3a;
+    display:flex; align-items:center; gap:10px; padding:0 14px;
+  }
+  #topbar h1 { font-size:13px; font-weight:600; color:#fff; }
+  .badge { font-size:10px; background:#2a3a5c; color:#7eb3f7; padding:2px 7px; border-radius:9px; }
+  #status { margin-left:auto; font-size:11px; color:#777; }
+
+  #sidebar { background:#13151f; border-right:1px solid #2a2d3a; overflow-y:auto; padding:10px; }
+  .sec { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#444; margin:12px 0 5px; }
+  .sec:first-child { margin-top:0; }
+  .row { display:flex; align-items:center; gap:5px; margin-bottom:6px; }
+  .row label { font-size:10px; color:#777; width:58px; flex-shrink:0; }
+  .row input[type=range] { flex:1; accent-color:#5b8dee; height:3px; }
+  .row span { font-size:10px; color:#bbb; width:34px; text-align:right; }
+  .tbtn { flex:1; padding:5px 3px; border:1px solid #2a2d3a; background:#1e2130;
+    color:#999; border-radius:5px; font-size:10px; cursor:pointer; text-align:center; transition:all .12s; }
+  .tbtn.on { background:#2a3a5c; border-color:#5b8dee; color:#7eb3f7; }
+  #btn3d { width:100%; padding:6px; background:#1a2f50; border:1px solid #2a5298;
+    color:#7eb3f7; border-radius:6px; cursor:pointer; font-size:11px; margin-bottom:6px; }
+  #btn3d.on { background:#2a5298; }
+  #legend { display:flex; flex-direction:column; gap:2px; }
+  .li { display:flex; align-items:center; gap:5px; font-size:10px; color:#999; }
+  .ls { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+  .mr { display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1a1d27; }
+  .ml { color:#666; } .mv { color:#7eb3f7; font-weight:600; }
+
+  #main { display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr; gap:2px; background:#080a0f; padding:2px; }
+  .vp { background:#0d0f18; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+  .vp canvas { image-rendering:pixelated; display:block; }
+  .vl { position:absolute; top:5px; left:7px; font-size:9px; font-weight:700; color:#5b8dee; text-transform:uppercase; pointer-events:none; letter-spacing:.05em; }
+  .vi { position:absolute; bottom:5px; right:7px; font-size:9px; color:#444; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<!-- ── FILE PICKER (shown first) ── -->
+<div id="picker">
+  <h1>🦷 CBCT Viewer</h1>
+  <p>ToothFairy2 Segmentation Pipeline</p>
+  <div class="file-box">
+    <div class="file-row">
+      <label>Scan file (scan.nii.gz)</label>
+      <input type="file" id="fin-scan" accept=".gz,.nii">
+    </div>
+    <div class="file-row">
+      <label>Mask file (mask.nii.gz)</label>
+      <input type="file" id="fin-mask" accept=".gz,.nii">
+    </div>
+    <div id="pick-status"></div>
+    <button id="go-btn" onclick="loadFiles()">▶ Load &amp; Visualize</button>
+  </div>
+  <div id="pick-prog">
+    <div id="pb"><div id="pf"></div></div>
+    <div id="pmsg"></div>
+  </div>
+</div>
+
+<!-- ── MAIN VIEWER (hidden until loaded) ── -->
+<div id="app">
+  <div id="topbar">
+    <h1>🦷 CBCT Tooth Segmentation Viewer</h1>
+    <span class="badge">ToothFairy2</span>
+    <span class="badge" id="cbadge">—</span>
+    <span id="status">—</span>
+  </div>
+  <div id="sidebar">
+    <div class="sec">Slices</div>
+    <div class="row"><label>Axial Z</label><input type="range" id="sl0" min="0" max="1" value="0"><span id="sv0">0</span></div>
+    <div class="row"><label>Coronal Y</label><input type="range" id="sl1" min="0" max="1" value="0"><span id="sv1">0</span></div>
+    <div class="row"><label>Sagittal X</label><input type="range" id="sl2" min="0" max="1" value="0"><span id="sv2">0</span></div>
+
+    <div class="sec">Display</div>
+    <div style="display:flex;gap:5px;margin-bottom:6px">
+      <div class="tbtn on" id="tscan" onclick="tog('scan')">Scan</div>
+      <div class="tbtn on" id="tmask" onclick="tog('mask')">Mask</div>
+    </div>
+    <div class="row"><label>Mask α</label><input type="range" id="malpha" min="0" max="100" value="55"><span id="mav">55%</span></div>
+    <div class="row"><label>Win width</label><input type="range" id="ww" min="200" max="4000" value="2000"><span id="wwv">2000</span></div>
+    <div class="row"><label>Win level</label><input type="range" id="wl" min="-1000" max="2000" value="300"><span id="wlv">300</span></div>
+
+    <div class="sec">3D Surface</div>
+    <button id="btn3d" onclick="toggle3d()">Generate 3D Surface</button>
+    <div class="row"><label>Auto-rotate</label><input type="range" id="rspd" min="0" max="10" value="2"><span id="rspdv">2</span></div>
+
+    <div class="sec">Legend</div>
+    <div id="legend"></div>
+    <div class="sec">Volume Info</div>
+    <div id="vinfo"></div>
+  </div>
+
+  <div id="main">
+    <div class="vp" id="vp0"><canvas id="cv0"></canvas><div class="vl">Axial</div><div class="vi" id="vi0">z=—</div></div>
+    <div class="vp" id="vp1"><canvas id="cv1"></canvas><div class="vl">Coronal</div><div class="vi" id="vi1">y=—</div></div>
+    <div class="vp" id="vp3d" style="cursor:grab"><canvas id="cv3d"></canvas><div class="vl">3D Surface</div><div class="vi">drag=rotate · scroll=zoom</div></div>
+    <div class="vp" id="vp2"><canvas id="cv2"></canvas><div class="vl">Sagittal</div><div class="vi" id="vi2">x=—</div></div>
+    <div class="vp" style="flex-direction:column;align-items:flex-start;padding:14px;gap:3px;cursor:default">
+      <div style="font-size:11px;font-weight:600;color:#7eb3f7;margin-bottom:4px">Session</div>
+      <div id="minfo" style="width:100%;font-size:10px"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── color map & names ────────────────────────────────────────────────────────
+const CLR={0:[0,0,0],1:[138,43,226],2:[30,144,255],3:[255,215,0],4:[255,165,0],
+  5:[255,99,71],6:[255,69,0],7:[220,20,60],8:[255,20,147],9:[148,0,211],
+  10:[75,0,130],11:[0,191,255],12:[0,255,127],13:[50,205,50],14:[173,255,47],
+  15:[255,255,0],16:[255,215,0],17:[255,140,0],18:[255,69,0],21:[0,250,154],
+  22:[0,255,255],23:[0,206,209],24:[95,158,160],25:[70,130,180],
+  26:[100,149,237],27:[0,0,205],28:[0,0,139],31:[255,182,193],
+  32:[255,105,180],33:[255,20,147],34:[199,21,133],35:[219,112,147],
+  36:[255,160,122],37:[250,128,114],38:[233,150,122],41:[144,238,144],
+  42:[0,255,0],43:[34,139,34],44:[0,128,0],45:[85,107,47],
+  46:[107,142,35],47:[154,205,50],48:[124,252,0]};
+const NAMES={0:"BG",1:"Upper jaw",2:"Lower jaw",3:"UR8",4:"UR7",5:"UR6",6:"UR5",7:"UR4",
+  8:"UR3",9:"UR2",10:"UR1",11:"UL1",12:"UL2",13:"UL3",14:"UL4",15:"UL5",
+  16:"UL6",17:"UL7",18:"UL8",21:"LL8",22:"LL7",23:"LL6",24:"LL5",25:"LL4",
+  26:"LL3",27:"LL2",28:"LL1",31:"LR1",32:"LR2",33:"LR3",34:"LR4",35:"LR5",
+  36:"LR6",37:"LR7",38:"LR8",41:"LL8b",42:"LL7b",43:"LL6b",44:"LL5b",
+  45:"LL4b",46:"LL3b",47:"LL2b",48:"LL1b"};
+
+// ── state ────────────────────────────────────────────────────────────────────
+const S={
+  scan:null,mask:null,dims:[1,1,1],sp:[1,1,1],sl:[0,0,0],
+  showScan:true,showMask:true,alpha:0.55,ww:2000,wl:300,
+  loaded:false,rspd:2,show3d:false,
+  three:{rdr:null,cam:null,grp:null,aid:null}
+};
+
+// ── NIfTI parser ──────────────────────────────────────────────────────────────
+function parseNIfTI(ab) {
+  const dv = new DataView(ab);
+  const datatype = dv.getInt16(70, true);
+  const ndim     = dv.getInt16(40, true);
+  const nx = dv.getInt16(42, true);   // X = columns
+  const ny = dv.getInt16(44, true);   // Y = rows
+  const nz = ndim >= 3 ? dv.getInt16(46, true) : 1; // Z = slices
+  const sx = dv.getFloat32(80, true); // pixdim[1] → dx
+  const sy = dv.getFloat32(84, true); // pixdim[2] → dy
+  const sz = dv.getFloat32(88, true); // pixdim[3] → dz
+  const offset = Math.max(352, Math.round(dv.getFloat32(108, true)));
+  const n = nx * ny * nz;
+
+  console.log(`NIfTI datatype=${datatype} nx=${nx} ny=${ny} nz=${nz} offset=${offset} n=${n}`);
+
+  const raw = ab.slice(offset);
+  let data;
+  if      (datatype===2)   data = new Uint8Array(raw,   0, n);
+  else if (datatype===256) data = new Int8Array(raw,    0, n);
+  else if (datatype===4)   data = new Int16Array(raw,   0, n);
+  else if (datatype===512) data = new Uint16Array(raw,  0, n);
+  else if (datatype===8)   data = new Int32Array(raw,   0, n);
+  else if (datatype===16)  data = new Float32Array(raw, 0, n);
+  else throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
+
+  // NIfTI dims: nx=X ny=Y nz=Z, voxels stored X-fastest (x,y,z)
+  // we want dims=[Z,Y,X] with index z*ny*nx + y*nx + x
+  return { data, dims:[nz,ny,nx], sp:[sz,sy,sx] };
+}
+
+async function readNIfTI(file) {
+  const ab  = await file.arrayBuffer();
+  const u8  = new Uint8Array(ab);
+  const isGZ = u8[0]===0x1f && u8[1]===0x8b;
+  let buf;
+  if (isGZ) {
+    // use native browser DecompressionStream — no library needed
+    const ds     = new DecompressionStream('gzip');
+    const writer = ds.writable.getWriter();
+    const reader = ds.readable.getReader();
+    writer.write(u8);
+    writer.close();
+    const chunks = [];
+    let totalLen = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalLen += value.length;
+    }
+    const out = new Uint8Array(totalLen);
+    let offset = 0;
+    for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
+    buf = out.buffer;
+  } else {
+    buf = ab;
+  }
+  return parseNIfTI(buf);
+}
+
+// ── load files ────────────────────────────────────────────────────────────────
+async function loadFiles() {
+  const sf = document.getElementById('fin-scan').files[0];
+  const mf = document.getElementById('fin-mask').files[0];
+  const st = document.getElementById('pick-status');
+  if (!sf || !mf) { st.textContent = '⚠ Select both files first.'; return; }
+  st.textContent = '';
+
+  const btn = document.getElementById('go-btn');
+  btn.disabled = true;
+  document.getElementById('pb').style.display = 'block';
+
+  try {
+    setP(10,'Decompressing scan…');
+    const scanObj = await readNIfTI(sf);
+    setP(55,'Decompressing mask…');
+    const maskObj = await readNIfTI(mf);
+    setP(85,'Building viewer…');
+
+    S.scan = scanObj.data;
+    S.mask = maskObj.data;
+    S.dims = scanObj.dims;   // [Z,Y,X]
+    S.sp   = scanObj.sp;     // [sz,sy,sx]
+    S.sl   = S.dims.map(d => Math.floor(d/2));
+    S.loaded = true;
+
+    [0,1,2].forEach(i=>{
+      const sl=document.getElementById(`sl${i}`);
+      sl.max=S.dims[i]-1; sl.value=S.sl[i];
+      document.getElementById(`sv${i}`).textContent=S.sl[i];
+    });
+
+    buildLegend(); buildVInfo(sf.name); buildMInfo();
+    document.getElementById('cbadge').textContent = sf.name.replace(/\.nii\.gz$|\.nii$/,'');
+    document.getElementById('status').textContent =
+      `${S.dims[2]}×${S.dims[1]}×${S.dims[0]} | ${S.sp.map(v=>v.toFixed(2)).join('×')} mm`;
+
+    setP(100,'Done!');
+    await new Promise(r=>setTimeout(r,300));
+
+    // switch views
+    document.getElementById('picker').style.display='none';
+    document.getElementById('app').style.display='grid';
+    renderAll();
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('pick-status').textContent = '❌ ' + e.message;
+    btn.disabled=false;
+  }
+}
+
+function setP(pct,msg){ document.getElementById('pf').style.width=pct+'%'; document.getElementById('pmsg').textContent=msg; }
+
+// ── index helper ─────────────────────────────────────────────────────────────
+function vi(z,y,x){ return z*S.dims[1]*S.dims[2] + y*S.dims[2] + x; }
+
+// ── rendering ─────────────────────────────────────────────────────────────────
+const CVS=[0,1,2].map(i=>document.getElementById(`cv${i}`));
+const CTX=CVS.map(c=>c.getContext('2d'));
+
+function normToGray(v){
+  const hu=v*2000, lo=S.wl-S.ww/2, hi=S.wl+S.ww/2;
+  return Math.max(0,Math.min(255,((hu-lo)/(hi-lo))*255))|0;
+}
+
+function drawSlice(dim){
+  if(!S.loaded) return;
+  const [Z,Y,X]=S.dims, [sz,sy,sx]=S.sl;
+  const vp=document.getElementById(`vp${dim}`);
+  const vpW=vp.clientWidth, vpH=vp.clientHeight;
+  let W,H,getSV;
+  if(dim===0){
+    W=X; H=Y;
+    getSV=(py,px)=>({s:S.scan[vi(sz,py,px)],m:S.mask[vi(sz,py,px)]});
+    document.getElementById('vi0').textContent=`z=${sz}`;
+  } else if(dim===1){
+    W=X; H=Z;
+    getSV=(py,px)=>({s:S.scan[vi(py,sy,px)],m:S.mask[vi(py,sy,px)]});
+    document.getElementById('vi1').textContent=`y=${sy}`;
+  } else {
+    W=Y; H=Z;
+    getSV=(py,px)=>({s:S.scan[vi(py,px,sx)],m:S.mask[vi(py,px,sx)]});
+    document.getElementById('vi2').textContent=`x=${sx}`;
+  }
+  CVS[dim].width=W; CVS[dim].height=H;
+  const id=CTX[dim].createImageData(W,H), d=id.data, a=S.alpha;
+  for(let py=0;py<H;py++) for(let px=0;px<W;px++){
+    const {s,m}=getSV(py,px);
+    const g=S.showScan?normToGray(s):0;
+    let r=g,gr=g,b=g;
+    if(S.showMask&&m>0){ const c=CLR[m]||[255,0,255];
+      r=(g*(1-a)+c[0]*a)|0; gr=(g*(1-a)+c[1]*a)|0; b=(g*(1-a)+c[2]*a)|0; }
+    const i=(py*W+px)*4; d[i]=r;d[i+1]=gr;d[i+2]=b;d[i+3]=255;
+  }
+  CTX[dim].putImageData(id,0,0);
+  const scale=Math.min(vpW/W,vpH/H);
+  CVS[dim].style.width=(W*scale)+'px'; CVS[dim].style.height=(H*scale)+'px';
+}
+function renderAll(){ [0,1,2].forEach(drawSlice); }
+
+// ── controls ──────────────────────────────────────────────────────────────────
+[0,1,2].forEach(i=>{
+  document.getElementById(`sl${i}`).oninput=e=>{
+    S.sl[i]=+e.target.value; document.getElementById(`sv${i}`).textContent=S.sl[i]; drawSlice(i);};
+  document.getElementById(`vp${i}`).addEventListener('wheel',e=>{
+    if(!S.loaded)return; e.preventDefault();
+    S.sl[i]=Math.max(0,Math.min(S.dims[i]-1,S.sl[i]+(e.deltaY>0?1:-1)));
+    document.getElementById(`sl${i}`).value=S.sl[i];
+    document.getElementById(`sv${i}`).textContent=S.sl[i]; drawSlice(i);
+  },{passive:false});
+});
+document.getElementById('malpha').oninput=e=>{S.alpha=e.target.value/100;document.getElementById('mav').textContent=e.target.value+'%';renderAll();};
+document.getElementById('ww').oninput=e=>{S.ww=+e.target.value;document.getElementById('wwv').textContent=S.ww;renderAll();};
+document.getElementById('wl').oninput=e=>{S.wl=+e.target.value;document.getElementById('wlv').textContent=S.wl;renderAll();};
+document.getElementById('rspd').oninput=e=>{S.rspd=+e.target.value;document.getElementById('rspdv').textContent=S.rspd;};
+function tog(w){
+  if(w==='scan'){S.showScan=!S.showScan;document.getElementById('tscan').classList.toggle('on',S.showScan);}
+  else{S.showMask=!S.showMask;document.getElementById('tmask').classList.toggle('on',S.showMask);}
+  renderAll();
+}
+
+// ── legend & info ─────────────────────────────────────────────────────────────
+function buildLegend(){
+  const present=[...new Set(Array.from(S.mask))].filter(v=>v>0).sort((a,b)=>a-b);
+  document.getElementById('legend').innerHTML=present.map(v=>{
+    const c=CLR[v]||[200,200,200];
+    return `<div class="li"><div class="ls" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div><span>${NAMES[v]||'cls'+v} (${v})</span></div>`;
+  }).join('');
+}
+function buildVInfo(fname){
+  const [Z,Y,X]=S.dims,[sz,sy,sx]=S.sp;
+  document.getElementById('vinfo').innerHTML=`
+    <div class="mr"><span class="ml">File</span><span class="mv" style="font-size:9px">${fname}</span></div>
+    <div class="mr"><span class="ml">Z×Y×X</span><span class="mv">${Z}×${Y}×${X}</span></div>
+    <div class="mr"><span class="ml">Spacing</span><span class="mv">${sz.toFixed(2)}×${sy.toFixed(2)}×${sx.toFixed(2)} mm</span></div>
+    <div class="mr"><span class="ml">Voxels</span><span class="mv">${(X*Y*Z/1e6).toFixed(1)}M</span></div>`;
+}
+function buildMInfo(){
+  const present=[...new Set(Array.from(S.mask))].filter(v=>v>0);
+  document.getElementById('minfo').innerHTML=`
+    <div class="mr"><span class="ml">Labels predicted</span><span class="mv">${present.length}</span></div>
+    <div class="mr"><span class="ml">IDs</span><span class="mv" style="font-size:9px">${present.slice(0,14).join(', ')}${present.length>14?'…':''}</span></div>
+    <div class="mr"><span class="ml">Model</span><span class="mv">nnUNet 3D</span></div>
+    <div class="mr"><span class="ml">Val Dice</span><span class="mv">0.3393</span></div>`;
+}
+
+// ── 3D ────────────────────────────────────────────────────────────────────────
+function toggle3d(){
+  if(!S.loaded){alert('Load files first.');return;}
+  const btn=document.getElementById('btn3d');
+  if(S.show3d){
+    S.show3d=false; btn.classList.remove('on'); btn.textContent='Generate 3D Surface';
+    if(S.three.aid)cancelAnimationFrame(S.three.aid);
+    if(S.three.rdr){S.three.rdr.dispose();S.three.rdr=null;}
+    const cv=document.getElementById('cv3d'); cv.width=1;cv.height=1; return;
+  }
+  S.show3d=true; btn.classList.add('on'); btn.textContent='Hide 3D';
+  build3d();
+}
+function build3d(){
+  const vp=document.getElementById('vp3d'), cv=document.getElementById('cv3d');
+  const W=vp.clientWidth, H=vp.clientHeight;
+  const rdr=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+  rdr.setSize(W,H); rdr.setClearColor(0x0d0f18,1); S.three.rdr=rdr;
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(45,W/H,0.1,5000); S.three.cam=cam;
+  scene.add(new THREE.AmbientLight(0xffffff,0.7));
+  const dl=new THREE.DirectionalLight(0xffffff,0.8); dl.position.set(1,2,1); scene.add(dl);
+
+  const [Z,Y,X]=S.dims;
+  const STEP=Math.max(1,Math.floor(Math.min(Z,Y,X)/65));
+  const byClass={};
+  for(let z=0;z<Z;z+=STEP) for(let y=0;y<Y;y+=STEP) for(let x=0;x<X;x+=STEP){
+    const m=S.mask[vi(z,y,x)]; if(m<=0)continue;
+    if(!byClass[m])byClass[m]=[];
+    byClass[m].push((x-X/2)*S.sp[2],-(y-Y/2)*S.sp[1],-(z-Z/2)*S.sp[0]);
+  }
+  const grp=new THREE.Group();
+  Object.entries(byClass).forEach(([cls,pts])=>{
+    const c=CLR[+cls]||[200,200,200];
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+    grp.add(new THREE.Points(geo,new THREE.PointsMaterial({
+      color:new THREE.Color(c[0]/255,c[1]/255,c[2]/255),size:STEP*0.4,sizeAttenuation:true})));
+  });
+  scene.add(grp); S.three.grp=grp;
+  const maxDim=Math.max(X*S.sp[2],Y*S.sp[1],Z*S.sp[0]);
+  cam.position.set(0,0,maxDim*1.5); cam.lookAt(0,0,0);
+
+  let drag=false,pm=[0,0];
+  cv.addEventListener('mousedown',e=>{drag=true;pm=[e.clientX,e.clientY];});
+  window.addEventListener('mouseup',()=>drag=false);
+  window.addEventListener('mousemove',e=>{
+    if(!drag)return;
+    grp.rotation.y+=(e.clientX-pm[0])*0.008;
+    grp.rotation.x+=(e.clientY-pm[1])*0.008;
+    pm=[e.clientX,e.clientY];
+  });
+  cv.addEventListener('wheel',e=>{cam.position.z=Math.max(20,cam.position.z+e.deltaY*0.4);},{passive:true});
+
+  (function animate(){
+    S.three.aid=requestAnimationFrame(animate);
+    if(S.rspd>0)grp.rotation.y+=S.rspd*0.003;
+    rdr.render(scene,cam);
+  })();
+}
+
+window.addEventListener('resize',()=>{
+  if(S.loaded)renderAll();
+  if(S.three.rdr){
+    const vp=document.getElementById('vp3d');
+    S.three.rdr.setSize(vp.clientWidth,vp.clientHeight);
+    S.three.cam.aspect=vp.clientWidth/vp.clientHeight;
+    S.three.cam.updateProjectionMatrix();
+  }
+});
+</script>
+</body>
+</html>

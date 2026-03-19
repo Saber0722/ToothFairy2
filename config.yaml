@@ -1,0 +1,54 @@
+project:
+  name: toothfairy2-pipeline
+  seed: 42
+
+paths:
+  raw_data:       data/raw/Dataset112_ToothFairy2
+  images_raw:     data/raw/Dataset112_ToothFairy2/imagesTr
+  labels_raw:     data/raw/Dataset112_ToothFairy2/labelsTr
+  dataset_json:   data/raw/Dataset112_ToothFairy2/dataset.json
+  processed_root: data/processed
+  processed_imgs: data/processed/images
+  processed_lbl:  data/processed/labels
+  splits:         data/processed/splits
+  results:        results
+  graphs:         results/graphs
+  models:         results/models
+  videos:         results/videos
+  predictions:    results/predictions
+  viewer_exports: viewer/exports
+
+data:
+  image_suffix:   _0000.mha       # images: ToothFairy2F_001_0000.mha
+  label_suffix:   .mha            # labels: ToothFairy2F_001.mha
+  image_size:     [96, 96, 96]   # was [128, 128, 128]
+  spacing:        [0.4, 0.4, 0.4]
+  intensity_clip: [-1000, 3000]
+  intensity_norm: [-1, 1]
+
+split:
+  train: 0.70
+  val:   0.15
+  test:  0.15
+
+training:
+  model:       nnunet
+  batch_size:  1          # was 2
+  num_epochs:  70
+  lr:          3.0e-4
+  optimizer:   adam
+  loss:        dice_ce
+  patch_size:  [96, 96, 96]   # was [128, 128, 128] 
+  num_workers: 2              # was 4
+  amp:         true
+
+validation:
+  num_samples: 4        # patches per volume for val
+  patch_overlap: 0.0    # no overlap needed for val patches
+
+labels:
+  background: 0
+  upper_jaw:  33
+  lower_jaw:  34
+  restoration: 35
+  pathology:   36
