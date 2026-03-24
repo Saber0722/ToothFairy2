@@ -4,447 +4,351 @@
 <meta charset="UTF-8">
 <title>CBCT Tooth Segmentation Viewer</title>
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#0f1117; color:#e0e0e0; font-family:system-ui,sans-serif; height:100vh; overflow:hidden; }
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0b10;color:#e0e0e0;font-family:system-ui,sans-serif;}
 
-  /* ── file picker overlay ── */
-  #picker {
-    position:fixed; inset:0; background:#0f1117; z-index:200;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
-  }
-  #picker h1 { font-size:22px; color:#7eb3f7; }
-  #picker p  { font-size:13px; color:#666; }
-  .file-box {
-    background:#13151f; border:1px solid #2a2d3a; border-radius:10px;
-    padding:20px 32px; width:380px; display:flex; flex-direction:column; gap:10px;
-  }
-  .file-row { display:flex; flex-direction:column; gap:4px; }
-  .file-row label { font-size:11px; color:#888; }
-  .file-row input { font-size:12px; color:#ccc; }
-  #go-btn {
-    width:100%; padding:10px; background:#1e3a5f; border:1px solid #2a5298;
-    color:#7eb3f7; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600;
-    transition:background .15s;
-  }
-  #go-btn:hover { background:#2a4a7f; }
-  #go-btn:disabled { opacity:0.4; cursor:default; }
-  #pick-status { font-size:12px; color:#e24b4a; min-height:18px; }
-  #pick-prog { width:380px; }
-  #pb { width:100%; height:3px; background:#1e2130; border-radius:2px; overflow:hidden; display:none; }
-  #pf { height:100%; background:#5b8dee; width:0%; transition:width .3s; }
-  #pmsg { font-size:11px; color:#666; margin-top:6px; }
+#picker{position:fixed;inset:0;background:#0a0b10;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+#picker h1{font-size:24px;color:#7eb3f7;letter-spacing:.02em;}
+#picker p{font-size:13px;color:#555;}
+.fbox{background:#13151f;border:1px solid #252836;border-radius:12px;padding:24px 28px;width:420px;display:flex;flex-direction:column;gap:12px;}
+.frow{display:flex;flex-direction:column;gap:4px;}
+.frow label{font-size:11px;color:#777;text-transform:uppercase;letter-spacing:.05em;}
+.frow input{font-size:12px;color:#ccc;background:transparent;border:none;outline:none;}
+#go{padding:11px;background:#1a3a60;border:1px solid #2a5298;color:#7eb3f7;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;transition:background .15s;}
+#go:hover{background:#234e82;}
+#go:disabled{opacity:.35;cursor:default;}
+#perr{font-size:12px;color:#e24b4a;min-height:16px;}
+.pbar{width:420px;}
+#pb{width:100%;height:3px;background:#1a1d27;border-radius:2px;overflow:hidden;display:none;margin-bottom:6px;}
+#pf{height:100%;background:#5b8dee;width:0%;transition:width .25s;}
+#pm{font-size:11px;color:#555;text-align:center;}
 
-  /* ── main app ── */
-  #app { display:grid; grid-template-columns:240px 1fr; grid-template-rows:44px 1fr; height:100vh; display:none; }
+#app{display:none;width:100%;height:100%;flex-direction:column;}
+#app.vis{display:flex;}
 
-  #topbar {
-    grid-column:1/-1; background:#1a1d27; border-bottom:1px solid #2a2d3a;
-    display:flex; align-items:center; gap:10px; padding:0 14px;
-  }
-  #topbar h1 { font-size:13px; font-weight:600; color:#fff; }
-  .badge { font-size:10px; background:#2a3a5c; color:#7eb3f7; padding:2px 7px; border-radius:9px; }
-  #status { margin-left:auto; font-size:11px; color:#777; }
+#bar{height:42px;background:#141720;border-bottom:1px solid #1e2130;display:flex;align-items:center;gap:10px;padding:0 14px;flex-shrink:0;}
+#bar h1{font-size:13px;font-weight:600;color:#fff;}
+.bdg{font-size:10px;background:#1e3050;color:#7eb3f7;padding:2px 8px;border-radius:8px;}
+#bst{margin-left:auto;font-size:11px;color:#555;}
 
-  #sidebar { background:#13151f; border-right:1px solid #2a2d3a; overflow-y:auto; padding:10px; }
-  .sec { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#444; margin:12px 0 5px; }
-  .sec:first-child { margin-top:0; }
-  .row { display:flex; align-items:center; gap:5px; margin-bottom:6px; }
-  .row label { font-size:10px; color:#777; width:58px; flex-shrink:0; }
-  .row input[type=range] { flex:1; accent-color:#5b8dee; height:3px; }
-  .row span { font-size:10px; color:#bbb; width:34px; text-align:right; }
-  .tbtn { flex:1; padding:5px 3px; border:1px solid #2a2d3a; background:#1e2130;
-    color:#999; border-radius:5px; font-size:10px; cursor:pointer; text-align:center; transition:all .12s; }
-  .tbtn.on { background:#2a3a5c; border-color:#5b8dee; color:#7eb3f7; }
-  #btn3d { width:100%; padding:6px; background:#1a2f50; border:1px solid #2a5298;
-    color:#7eb3f7; border-radius:6px; cursor:pointer; font-size:11px; margin-bottom:6px; }
-  #btn3d.on { background:#2a5298; }
-  #legend { display:flex; flex-direction:column; gap:2px; }
-  .li { display:flex; align-items:center; gap:5px; font-size:10px; color:#999; }
-  .ls { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
-  .mr { display:flex; justify-content:space-between; font-size:10px; padding:2px 0; border-bottom:1px solid #1a1d27; }
-  .ml { color:#666; } .mv { color:#7eb3f7; font-weight:600; }
+#body{display:flex;flex:1;min-height:0;}
 
-  #main { display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr; gap:2px; background:#080a0f; padding:2px; }
-  .vp { background:#0d0f18; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; }
-  .vp canvas { image-rendering:pixelated; display:block; }
-  .vl { position:absolute; top:5px; left:7px; font-size:9px; font-weight:700; color:#5b8dee; text-transform:uppercase; pointer-events:none; letter-spacing:.05em; }
-  .vi { position:absolute; bottom:5px; right:7px; font-size:9px; color:#444; pointer-events:none; }
+#side{width:220px;flex-shrink:0;background:#0f1118;border-right:1px solid #1a1d27;overflow-y:auto;padding:10px;}
+.sh{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#333;margin:14px 0 5px;}
+.sh:first-child{margin-top:0;}
+.sr{display:flex;align-items:center;gap:5px;margin-bottom:5px;}
+.sr label{font-size:10px;color:#666;width:60px;flex-shrink:0;}
+.sr input[type=range]{flex:1;accent-color:#5b8dee;height:3px;}
+.sr span{font-size:10px;color:#aaa;width:32px;text-align:right;}
+.sb{flex:1;padding:5px 2px;border:1px solid #1e2130;background:#131520;color:#888;border-radius:5px;font-size:10px;cursor:pointer;text-align:center;transition:all .1s;}
+.sb.on{background:#1e3050;border-color:#3a6abf;color:#7eb3f7;}
+.li{display:flex;align-items:center;gap:5px;font-size:10px;color:#888;cursor:pointer;padding:2px 4px;border-radius:3px;margin-bottom:1px;}
+.li:hover{background:#131520;}
+.li.off{opacity:.3;}
+.lc{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+.mi{display:flex;justify-content:space-between;font-size:10px;padding:2px 0;border-bottom:1px solid #131520;}
+.mk{color:#555;}.mv{color:#7eb3f7;font-weight:600;}
+
+#views{flex:1;min-width:0;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;background:#060708;padding:2px;}
+.vp{background:#0c0d14;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;}
+.vp canvas{display:block;image-rendering:pixelated;}
+.vl{position:absolute;top:5px;left:7px;font-size:9px;font-weight:700;color:#3a6abf;text-transform:uppercase;letter-spacing:.06em;pointer-events:none;}
+.vi{position:absolute;bottom:5px;right:7px;font-size:9px;color:#333;pointer-events:none;}
+#vp3d{grid-column:1;grid-row:1/3;cursor:grab;}
+#vp3d canvas{width:100%!important;height:100%!important;}
 </style>
 </head>
 <body>
 
-<!-- ── FILE PICKER (shown first) ── -->
 <div id="picker">
-  <h1>🦷 CBCT Viewer</h1>
-  <p>ToothFairy2 Segmentation Pipeline</p>
-  <div class="file-box">
-    <div class="file-row">
-      <label>Scan file (scan.nii.gz)</label>
-      <input type="file" id="fin-scan" accept=".gz,.nii">
-    </div>
-    <div class="file-row">
-      <label>Mask file (mask.nii.gz)</label>
-      <input type="file" id="fin-mask" accept=".gz,.nii">
-    </div>
-    <div id="pick-status"></div>
-    <button id="go-btn" onclick="loadFiles()">▶ Load &amp; Visualize</button>
+  <h1>🦷 CBCT 3D Viewer</h1>
+  <p>ToothFairy2 — Mesh-based segmentation viewer</p>
+  <div class="fbox">
+    <div class="frow"><label>Scan (scan.nii.gz)</label><input type="file" id="fs" accept=".gz,.nii"></div>
+    <div class="frow"><label>Mask (mask.nii.gz)</label><input type="file" id="fm" accept=".gz,.nii"></div>
+    <div class="frow"><label>Mesh data (mesh_data.json)</label><input type="file" id="fj" accept=".json"></div>
+    <div id="perr"></div>
+    <button id="go" onclick="loadAll()">▶ Load &amp; Visualize</button>
   </div>
-  <div id="pick-prog">
-    <div id="pb"><div id="pf"></div></div>
-    <div id="pmsg"></div>
-  </div>
+  <div class="pbar"><div id="pb"><div id="pf"></div></div><div id="pm">Select all three files above</div></div>
 </div>
 
-<!-- ── MAIN VIEWER (hidden until loaded) ── -->
 <div id="app">
-  <div id="topbar">
+  <div id="bar">
     <h1>🦷 CBCT Tooth Segmentation Viewer</h1>
-    <span class="badge">ToothFairy2</span>
-    <span class="badge" id="cbadge">—</span>
-    <span id="status">—</span>
+    <span class="bdg">ToothFairy2</span>
+    <span class="bdg" id="bcid">—</span>
+    <span id="bst">—</span>
   </div>
-  <div id="sidebar">
-    <div class="sec">Slices</div>
-    <div class="row"><label>Axial Z</label><input type="range" id="sl0" min="0" max="1" value="0"><span id="sv0">0</span></div>
-    <div class="row"><label>Coronal Y</label><input type="range" id="sl1" min="0" max="1" value="0"><span id="sv1">0</span></div>
-    <div class="row"><label>Sagittal X</label><input type="range" id="sl2" min="0" max="1" value="0"><span id="sv2">0</span></div>
+  <div id="body">
+    <div id="side">
+      <div class="sh">2D Slices</div>
+      <div class="sr"><label>Axial Z</label><input type="range" id="sl0" min="0" max="1" value="0"><span id="sv0">0</span></div>
+      <div class="sr"><label>Coronal Y</label><input type="range" id="sl1" min="0" max="1" value="0"><span id="sv1">0</span></div>
+      <div class="sr"><label>Sagittal X</label><input type="range" id="sl2" min="0" max="1" value="0"><span id="sv2">0</span></div>
 
-    <div class="sec">Display</div>
-    <div style="display:flex;gap:5px;margin-bottom:6px">
-      <div class="tbtn on" id="tscan" onclick="tog('scan')">Scan</div>
-      <div class="tbtn on" id="tmask" onclick="tog('mask')">Mask</div>
+      <div class="sh">Display</div>
+      <div style="display:flex;gap:5px;margin-bottom:6px">
+        <div class="sb on" id="tsc" onclick="togL('scan')">Scan</div>
+        <div class="sb on" id="tmk" onclick="togL('mask')">Overlay</div>
+      </div>
+      <div class="sr"><label>Mask α</label><input type="range" id="ma" min="0" max="100" value="55"><span id="mav">55%</span></div>
+      <div class="sr"><label>Win width</label><input type="range" id="ww" min="200" max="4000" value="2000"><span id="wwv">2000</span></div>
+      <div class="sr"><label>Win level</label><input type="range" id="wl" min="-1000" max="2000" value="300"><span id="wlv">300</span></div>
+
+      <div class="sh">3D Mesh</div>
+      <div style="display:flex;gap:5px;margin-bottom:6px">
+        <div class="sb on" id="twr" onclick="togWire()">Solid</div>
+        <div class="sb" id="trt" onclick="togRot()">Rotate</div>
+      </div>
+      <div class="sr"><label>Opacity</label><input type="range" id="op" min="10" max="100" value="90"><span id="opv">90%</span></div>
+      <div class="sr"><label>Rot speed</label><input type="range" id="rs" min="0" max="10" value="3"><span id="rsv">3</span></div>
+
+      <div class="sh">Structures</div>
+      <div id="lgd"></div>
+      <div class="sh">Info</div>
+      <div id="inf"></div>
+      <div class="sh">Mesh Stats</div>
+      <div id="mst"></div>
     </div>
-    <div class="row"><label>Mask α</label><input type="range" id="malpha" min="0" max="100" value="55"><span id="mav">55%</span></div>
-    <div class="row"><label>Win width</label><input type="range" id="ww" min="200" max="4000" value="2000"><span id="wwv">2000</span></div>
-    <div class="row"><label>Win level</label><input type="range" id="wl" min="-1000" max="2000" value="300"><span id="wlv">300</span></div>
 
-    <div class="sec">3D Surface</div>
-    <button id="btn3d" onclick="toggle3d()">Generate 3D Surface</button>
-    <div class="row"><label>Auto-rotate</label><input type="range" id="rspd" min="0" max="10" value="2"><span id="rspdv">2</span></div>
-
-    <div class="sec">Legend</div>
-    <div id="legend"></div>
-    <div class="sec">Volume Info</div>
-    <div id="vinfo"></div>
-  </div>
-
-  <div id="main">
-    <div class="vp" id="vp0"><canvas id="cv0"></canvas><div class="vl">Axial</div><div class="vi" id="vi0">z=—</div></div>
-    <div class="vp" id="vp1"><canvas id="cv1"></canvas><div class="vl">Coronal</div><div class="vi" id="vi1">y=—</div></div>
-    <div class="vp" id="vp3d" style="cursor:grab"><canvas id="cv3d"></canvas><div class="vl">3D Surface</div><div class="vi">drag=rotate · scroll=zoom</div></div>
-    <div class="vp" id="vp2"><canvas id="cv2"></canvas><div class="vl">Sagittal</div><div class="vi" id="vi2">x=—</div></div>
-    <div class="vp" style="flex-direction:column;align-items:flex-start;padding:14px;gap:3px;cursor:default">
-      <div style="font-size:11px;font-weight:600;color:#7eb3f7;margin-bottom:4px">Session</div>
-      <div id="minfo" style="width:100%;font-size:10px"></div>
+    <div id="views">
+      <div class="vp" id="vp3d">
+        <canvas id="c3d"></canvas>
+        <div class="vl">3D Mesh Surface</div>
+        <div class="vi">drag=rotate · scroll=zoom</div>
+      </div>
+      <div class="vp" id="vp0"><canvas id="c0"></canvas><div class="vl">Axial</div><div class="vi" id="i0">z=—</div></div>
+      <div class="vp" id="vp1"><canvas id="c1"></canvas><div class="vl">Coronal</div><div class="vi" id="i1">y=—</div></div>
+      <div class="vp" id="vp2"><canvas id="c2"></canvas><div class="vl">Sagittal</div><div class="vi" id="i2">x=—</div></div>
+      <div class="vp" style="flex-direction:column;align-items:flex-start;padding:14px;overflow-y:auto;cursor:default;">
+        <div style="font-size:11px;font-weight:600;color:#7eb3f7;margin-bottom:6px">Session</div>
+        <div id="ses" style="width:100%"></div>
+      </div>
     </div>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ── color map & names ────────────────────────────────────────────────────────
-const CLR={0:[0,0,0],1:[138,43,226],2:[30,144,255],3:[255,215,0],4:[255,165,0],
-  5:[255,99,71],6:[255,69,0],7:[220,20,60],8:[255,20,147],9:[148,0,211],
-  10:[75,0,130],11:[0,191,255],12:[0,255,127],13:[50,205,50],14:[173,255,47],
-  15:[255,255,0],16:[255,215,0],17:[255,140,0],18:[255,69,0],21:[0,250,154],
-  22:[0,255,255],23:[0,206,209],24:[95,158,160],25:[70,130,180],
-  26:[100,149,237],27:[0,0,205],28:[0,0,139],31:[255,182,193],
-  32:[255,105,180],33:[255,20,147],34:[199,21,133],35:[219,112,147],
-  36:[255,160,122],37:[250,128,114],38:[233,150,122],41:[144,238,144],
-  42:[0,255,0],43:[34,139,34],44:[0,128,0],45:[85,107,47],
-  46:[107,142,35],47:[154,205,50],48:[124,252,0]};
-const NAMES={0:"BG",1:"Upper jaw",2:"Lower jaw",3:"UR8",4:"UR7",5:"UR6",6:"UR5",7:"UR4",
-  8:"UR3",9:"UR2",10:"UR1",11:"UL1",12:"UL2",13:"UL3",14:"UL4",15:"UL5",
-  16:"UL6",17:"UL7",18:"UL8",21:"LL8",22:"LL7",23:"LL6",24:"LL5",25:"LL4",
-  26:"LL3",27:"LL2",28:"LL1",31:"LR1",32:"LR2",33:"LR3",34:"LR4",35:"LR5",
-  36:"LR6",37:"LR7",38:"LR8",41:"LL8b",42:"LL7b",43:"LL6b",44:"LL5b",
-  45:"LL4b",46:"LL3b",47:"LL2b",48:"LL1b"};
+const CLR={0:[0,0,0],1:[138,43,226],2:[30,144,255],3:[255,215,0],4:[255,165,0],5:[255,99,71],6:[255,69,0],7:[220,20,60],8:[255,20,147],9:[148,0,211],10:[75,0,130],11:[0,191,255],12:[0,255,127],13:[50,205,50],14:[173,255,47],15:[255,255,0],16:[255,215,0],17:[255,140,0],18:[255,69,0],21:[0,250,154],22:[0,255,255],23:[0,206,209],24:[95,158,160],25:[70,130,180],26:[100,149,237],27:[0,0,205],28:[0,0,139],31:[255,182,193],32:[255,105,180],33:[255,20,147],34:[199,21,133],35:[219,112,147],36:[255,160,122],37:[250,128,114],38:[233,150,122],41:[144,238,144],42:[0,255,0],43:[34,139,34],44:[0,128,0],45:[85,107,47],46:[107,142,35],47:[154,205,50],48:[124,252,0]};
 
-// ── state ────────────────────────────────────────────────────────────────────
 const S={
   scan:null,mask:null,dims:[1,1,1],sp:[1,1,1],sl:[0,0,0],
-  showScan:true,showMask:true,alpha:0.55,ww:2000,wl:300,
-  loaded:false,rspd:2,show3d:false,
-  three:{rdr:null,cam:null,grp:null,aid:null}
+  showScan:true,showMask:true,alpha:.55,ww:2000,wl:300,
+  md:null,loaded:false,wire:false,rot:false,op:.9,rs:3,
+  T:{rdr:null,cam:null,grp:null,aid:null,meshes:{}},
+  hidden:new Set()
 };
 
-// ── NIfTI parser ──────────────────────────────────────────────────────────────
-function parseNIfTI(ab) {
-  const dv = new DataView(ab);
-  const datatype = dv.getInt16(70, true);
-  const ndim     = dv.getInt16(40, true);
-  const nx = dv.getInt16(42, true);   // X = columns
-  const ny = dv.getInt16(44, true);   // Y = rows
-  const nz = ndim >= 3 ? dv.getInt16(46, true) : 1; // Z = slices
-  const sx = dv.getFloat32(80, true); // pixdim[1] → dx
-  const sy = dv.getFloat32(84, true); // pixdim[2] → dy
-  const sz = dv.getFloat32(88, true); // pixdim[3] → dz
-  const offset = Math.max(352, Math.round(dv.getFloat32(108, true)));
-  const n = nx * ny * nz;
-
-  console.log(`NIfTI datatype=${datatype} nx=${nx} ny=${ny} nz=${nz} offset=${offset} n=${n}`);
-
-  const raw = ab.slice(offset);
+// NIfTI
+function parseNII(ab){
+  const dv=new DataView(ab);
+  const dt=dv.getInt16(70,true),nd=dv.getInt16(40,true);
+  const nx=dv.getInt16(42,true),ny=dv.getInt16(44,true),nz=nd>=3?dv.getInt16(46,true):1;
+  const sx=dv.getFloat32(80,true),sy=dv.getFloat32(84,true),sz=dv.getFloat32(88,true);
+  const off=Math.max(352,Math.round(dv.getFloat32(108,true)));
+  const n=nx*ny*nz, raw=ab.slice(off);
   let data;
-  if      (datatype===2)   data = new Uint8Array(raw,   0, n);
-  else if (datatype===256) data = new Int8Array(raw,    0, n);
-  else if (datatype===4)   data = new Int16Array(raw,   0, n);
-  else if (datatype===512) data = new Uint16Array(raw,  0, n);
-  else if (datatype===8)   data = new Int32Array(raw,   0, n);
-  else if (datatype===16)  data = new Float32Array(raw, 0, n);
-  else throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
-
-  // NIfTI dims: nx=X ny=Y nz=Z, voxels stored X-fastest (x,y,z)
-  // we want dims=[Z,Y,X] with index z*ny*nx + y*nx + x
-  return { data, dims:[nz,ny,nx], sp:[sz,sy,sx] };
+  if(dt===2)data=new Uint8Array(raw,0,n);
+  else if(dt===4)data=new Int16Array(raw,0,n);
+  else if(dt===16)data=new Float32Array(raw,0,n);
+  else if(dt===512)data=new Uint16Array(raw,0,n);
+  else data=new Int16Array(raw,0,n);
+  return{data,dims:[nz,ny,nx],sp:[sz,sy,sx]};
+}
+async function readNII(file){
+  const ab=await file.arrayBuffer();
+  const u8=new Uint8Array(ab);
+  if(!(u8[0]===0x1f&&u8[1]===0x8b))return parseNII(ab);
+  const ds=new DecompressionStream('gzip'),w=ds.writable.getWriter(),r=ds.readable.getReader();
+  w.write(u8);w.close();
+  const ch=[];let tot=0;
+  while(1){const{done,value}=await r.read();if(done)break;ch.push(value);tot+=value.length;}
+  const out=new Uint8Array(tot);let o=0;
+  for(const c of ch){out.set(c,o);o+=c.length;}
+  return parseNII(out.buffer);
 }
 
-async function readNIfTI(file) {
-  const ab  = await file.arrayBuffer();
-  const u8  = new Uint8Array(ab);
-  const isGZ = u8[0]===0x1f && u8[1]===0x8b;
-  let buf;
-  if (isGZ) {
-    // use native browser DecompressionStream — no library needed
-    const ds     = new DecompressionStream('gzip');
-    const writer = ds.writable.getWriter();
-    const reader = ds.readable.getReader();
-    writer.write(u8);
-    writer.close();
-    const chunks = [];
-    let totalLen = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      totalLen += value.length;
-    }
-    const out = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
-    buf = out.buffer;
-  } else {
-    buf = ab;
-  }
-  return parseNIfTI(buf);
-}
-
-// ── load files ────────────────────────────────────────────────────────────────
-async function loadFiles() {
-  const sf = document.getElementById('fin-scan').files[0];
-  const mf = document.getElementById('fin-mask').files[0];
-  const st = document.getElementById('pick-status');
-  if (!sf || !mf) { st.textContent = '⚠ Select both files first.'; return; }
-  st.textContent = '';
-
-  const btn = document.getElementById('go-btn');
-  btn.disabled = true;
-  document.getElementById('pb').style.display = 'block';
-
-  try {
-    setP(10,'Decompressing scan…');
-    const scanObj = await readNIfTI(sf);
-    setP(55,'Decompressing mask…');
-    const maskObj = await readNIfTI(mf);
-    setP(85,'Building viewer…');
-
-    S.scan = scanObj.data;
-    S.mask = maskObj.data;
-    S.dims = scanObj.dims;   // [Z,Y,X]
-    S.sp   = scanObj.sp;     // [sz,sy,sx]
-    S.sl   = S.dims.map(d => Math.floor(d/2));
-    S.loaded = true;
-
-    [0,1,2].forEach(i=>{
-      const sl=document.getElementById(`sl${i}`);
-      sl.max=S.dims[i]-1; sl.value=S.sl[i];
-      document.getElementById(`sv${i}`).textContent=S.sl[i];
-    });
-
-    buildLegend(); buildVInfo(sf.name); buildMInfo();
-    document.getElementById('cbadge').textContent = sf.name.replace(/\.nii\.gz$|\.nii$/,'');
-    document.getElementById('status').textContent =
-      `${S.dims[2]}×${S.dims[1]}×${S.dims[0]} | ${S.sp.map(v=>v.toFixed(2)).join('×')} mm`;
-
-    setP(100,'Done!');
-    await new Promise(r=>setTimeout(r,300));
-
-    // switch views
+// Load
+async function loadAll(){
+  const sf=document.getElementById('fs').files[0];
+  const mf=document.getElementById('fm').files[0];
+  const jf=document.getElementById('fj').files[0];
+  if(!sf||!mf||!jf){document.getElementById('perr').textContent='Select all three files.';return;}
+  document.getElementById('perr').textContent='';
+  document.getElementById('go').disabled=true;
+  document.getElementById('pb').style.display='block';
+  try{
+    sp(10,'Decompressing scan…');   const sc=await readNII(sf);
+    sp(42,'Decompressing mask…');   const mk=await readNII(mf);
+    sp(68,'Parsing mesh JSON…');    const md=JSON.parse(await jf.text());
+    sp(88,'Initialising viewer…');
+    S.scan=sc.data;S.mask=mk.data;S.dims=sc.dims;S.sp=sc.sp;
+    S.sl=S.dims.map(d=>Math.floor(d/2));S.md=md;S.loaded=true;
+    [0,1,2].forEach(i=>{const s=document.getElementById(`sl${i}`);s.max=S.dims[i]-1;s.value=S.sl[i];document.getElementById(`sv${i}`).textContent=S.sl[i];});
+    buildLgd();buildInf(sf.name);
+    document.getElementById('bcid').textContent=sf.name.replace(/\.nii\.gz$|\.nii$/,'');
+    document.getElementById('bst').textContent=`${S.dims[2]}×${S.dims[1]}×${S.dims[0]} | ${md.classes.length} meshes`;
+    sp(100,'Done!');
+    await new Promise(r=>setTimeout(r,200));
     document.getElementById('picker').style.display='none';
-    document.getElementById('app').style.display='grid';
+    document.getElementById('app').classList.add('vis');
+    // wait for flex layout to paint
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    await new Promise(r=>setTimeout(r,80));
     renderAll();
-
-  } catch(e) {
+    init3D();
+  }catch(e){
     console.error(e);
-    document.getElementById('pick-status').textContent = '❌ ' + e.message;
-    btn.disabled=false;
+    document.getElementById('perr').textContent='Error: '+e.message;
+    document.getElementById('go').disabled=false;
   }
 }
+function sp(p,m){document.getElementById('pf').style.width=p+'%';document.getElementById('pm').textContent=m;}
 
-function setP(pct,msg){ document.getElementById('pf').style.width=pct+'%'; document.getElementById('pmsg').textContent=msg; }
-
-// ── index helper ─────────────────────────────────────────────────────────────
-function vi(z,y,x){ return z*S.dims[1]*S.dims[2] + y*S.dims[2] + x; }
-
-// ── rendering ─────────────────────────────────────────────────────────────────
-const CVS=[0,1,2].map(i=>document.getElementById(`cv${i}`));
-const CTX=CVS.map(c=>c.getContext('2d'));
-
-function normToGray(v){
-  const hu=v*2000, lo=S.wl-S.ww/2, hi=S.wl+S.ww/2;
-  return Math.max(0,Math.min(255,((hu-lo)/(hi-lo))*255))|0;
-}
-
-function drawSlice(dim){
-  if(!S.loaded) return;
-  const [Z,Y,X]=S.dims, [sz,sy,sx]=S.sl;
-  const vp=document.getElementById(`vp${dim}`);
-  const vpW=vp.clientWidth, vpH=vp.clientHeight;
-  let W,H,getSV;
-  if(dim===0){
-    W=X; H=Y;
-    getSV=(py,px)=>({s:S.scan[vi(sz,py,px)],m:S.mask[vi(sz,py,px)]});
-    document.getElementById('vi0').textContent=`z=${sz}`;
-  } else if(dim===1){
-    W=X; H=Z;
-    getSV=(py,px)=>({s:S.scan[vi(py,sy,px)],m:S.mask[vi(py,sy,px)]});
-    document.getElementById('vi1').textContent=`y=${sy}`;
-  } else {
-    W=Y; H=Z;
-    getSV=(py,px)=>({s:S.scan[vi(py,px,sx)],m:S.mask[vi(py,px,sx)]});
-    document.getElementById('vi2').textContent=`x=${sx}`;
-  }
-  CVS[dim].width=W; CVS[dim].height=H;
-  const id=CTX[dim].createImageData(W,H), d=id.data, a=S.alpha;
-  for(let py=0;py<H;py++) for(let px=0;px<W;px++){
-    const {s,m}=getSV(py,px);
-    const g=S.showScan?normToGray(s):0;
+// 2D
+const CV=[0,1,2].map(i=>document.getElementById(`c${i}`));
+const CX=CV.map(c=>c.getContext('2d'));
+function idx(z,y,x){return z*S.dims[1]*S.dims[2]+y*S.dims[2]+x;}
+function g2(v){const hu=v*2000,lo=S.wl-S.ww/2,hi=S.wl+S.ww/2;return Math.max(0,Math.min(255,((hu-lo)/(hi-lo))*255))|0;}
+function drawSlice(d){
+  if(!S.loaded)return;
+  const[Z,Y,X]=S.dims,[sz,sy,sx]=S.sl;
+  const vp=document.getElementById(`vp${d}`);
+  const vW=vp.clientWidth,vH=vp.clientHeight;
+  let W,H,gp;
+  if(d===0){W=X;H=Y;gp=(py,px)=>({s:S.scan[idx(sz,py,px)],m:S.mask[idx(sz,py,px)]});document.getElementById('i0').textContent=`z=${sz}`;}
+  else if(d===1){W=X;H=Z;gp=(py,px)=>({s:S.scan[idx(py,sy,px)],m:S.mask[idx(py,sy,px)]});document.getElementById('i1').textContent=`y=${sy}`;}
+  else{W=Y;H=Z;gp=(py,px)=>({s:S.scan[idx(py,px,sx)],m:S.mask[idx(py,px,sx)]});document.getElementById('i2').textContent=`x=${sx}`;}
+  CV[d].width=W;CV[d].height=H;
+  const im=CX[d].createImageData(W,H),dt=im.data,a=S.alpha;
+  for(let py=0;py<H;py++)for(let px=0;px<W;px++){
+    const{s,m}=gp(py,px),g=S.showScan?g2(s):0;
     let r=g,gr=g,b=g;
-    if(S.showMask&&m>0){ const c=CLR[m]||[255,0,255];
-      r=(g*(1-a)+c[0]*a)|0; gr=(g*(1-a)+c[1]*a)|0; b=(g*(1-a)+c[2]*a)|0; }
-    const i=(py*W+px)*4; d[i]=r;d[i+1]=gr;d[i+2]=b;d[i+3]=255;
+    if(S.showMask&&m>0){const c=CLR[m]||[255,0,255];r=(g*(1-a)+c[0]*a)|0;gr=(g*(1-a)+c[1]*a)|0;b=(g*(1-a)+c[2]*a)|0;}
+    const i=(py*W+px)*4;dt[i]=r;dt[i+1]=gr;dt[i+2]=b;dt[i+3]=255;
   }
-  CTX[dim].putImageData(id,0,0);
-  const scale=Math.min(vpW/W,vpH/H);
-  CVS[dim].style.width=(W*scale)+'px'; CVS[dim].style.height=(H*scale)+'px';
+  CX[d].putImageData(im,0,0);
+  const sc=Math.min(vW/W,vH/H);
+  CV[d].style.width=(W*sc)+'px';CV[d].style.height=(H*sc)+'px';
 }
-function renderAll(){ [0,1,2].forEach(drawSlice); }
+function renderAll(){[0,1,2].forEach(drawSlice);}
 
-// ── controls ──────────────────────────────────────────────────────────────────
-[0,1,2].forEach(i=>{
-  document.getElementById(`sl${i}`).oninput=e=>{
-    S.sl[i]=+e.target.value; document.getElementById(`sv${i}`).textContent=S.sl[i]; drawSlice(i);};
-  document.getElementById(`vp${i}`).addEventListener('wheel',e=>{
-    if(!S.loaded)return; e.preventDefault();
-    S.sl[i]=Math.max(0,Math.min(S.dims[i]-1,S.sl[i]+(e.deltaY>0?1:-1)));
-    document.getElementById(`sl${i}`).value=S.sl[i];
-    document.getElementById(`sv${i}`).textContent=S.sl[i]; drawSlice(i);
-  },{passive:false});
-});
-document.getElementById('malpha').oninput=e=>{S.alpha=e.target.value/100;document.getElementById('mav').textContent=e.target.value+'%';renderAll();};
-document.getElementById('ww').oninput=e=>{S.ww=+e.target.value;document.getElementById('wwv').textContent=S.ww;renderAll();};
-document.getElementById('wl').oninput=e=>{S.wl=+e.target.value;document.getElementById('wlv').textContent=S.wl;renderAll();};
-document.getElementById('rspd').oninput=e=>{S.rspd=+e.target.value;document.getElementById('rspdv').textContent=S.rspd;};
-function tog(w){
-  if(w==='scan'){S.showScan=!S.showScan;document.getElementById('tscan').classList.toggle('on',S.showScan);}
-  else{S.showMask=!S.showMask;document.getElementById('tmask').classList.toggle('on',S.showMask);}
-  renderAll();
+// 3D
+function init3D(){
+  const vp=document.getElementById('vp3d');
+  const cv=document.getElementById('c3d');
+  const rect=vp.getBoundingClientRect();
+  const W=rect.width, H=rect.height;
+  console.log('3D size:',W,H);
+  if(W<10||H<10){console.warn('retrying 3D init…');setTimeout(init3D,150);return;}
+
+  const rdr=new THREE.WebGLRenderer({canvas:cv,antialias:true});
+  rdr.setSize(W,H,false);
+  rdr.setPixelRatio(Math.min(devicePixelRatio,2));
+  rdr.setClearColor(0x080910,1);
+  S.T.rdr=rdr;
+
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(45,W/H,0.1,10000);
+  S.T.cam=cam;
+
+  scene.add(new THREE.AmbientLight(0xffffff,.5));
+  const kl=new THREE.DirectionalLight(0xffffff,.9);kl.position.set(1,2,1.5);scene.add(kl);
+  const fl=new THREE.DirectionalLight(0x8888ff,.3);fl.position.set(-1,-1,1);scene.add(fl);
+  const rl=new THREE.DirectionalLight(0xffffcc,.2);rl.position.set(0,1,-2);scene.add(rl);
+
+  const grp=new THREE.Group();
+  let tf=0;
+  S.md.classes.forEach(cls=>{
+    const vt=new Float32Array(cls.verts);
+    const fc=new Uint32Array(cls.faces);
+    const geo=new THREE.BufferGeometry();
+    const sw=new Float32Array(vt.length);
+    for(let i=0;i<vt.length;i+=3){sw[i]=vt[i+2];sw[i+1]=-vt[i+1];sw[i+2]=-vt[i];}
+    geo.setAttribute('position',new THREE.BufferAttribute(sw,3));
+    geo.setIndex(new THREE.BufferAttribute(fc,1));
+    geo.computeVertexNormals();
+    const c=cls.color;
+    const mat=new THREE.MeshPhongMaterial({color:new THREE.Color(c[0],c[1],c[2]),transparent:true,opacity:S.op,shininess:70,specular:new THREE.Color(.15,.15,.15),side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo,mat);
+    grp.add(mesh);S.T.meshes[cls.cls]=mesh;tf+=cls.n_faces;
+  });
+  scene.add(grp);S.T.grp=grp;
+
+  const box=new THREE.Box3().setFromObject(grp);
+  const ctr=box.getCenter(new THREE.Vector3());
+  const sz=box.getSize(new THREE.Vector3());
+  grp.position.sub(ctr);
+  const md=Math.max(sz.x,sz.y,sz.z);
+  cam.position.set(0,md*.15,md*1.5);cam.lookAt(0,0,0);
+  console.log('bbox:',sz,'cam z:',cam.position.z);
+
+  // mesh stats
+  document.getElementById('mst').innerHTML=
+    S.md.classes.map(c=>`<div class="mi"><span class="mk">${c.name}</span><span class="mv">${c.n_faces.toLocaleString()}</span></div>`).join('')+
+    `<div class="mi"><span class="mk">Total</span><span class="mv">${tf.toLocaleString()}</span></div>`;
+
+  // orbit
+  let drag=false,pm=[0,0];
+  cv.addEventListener('mousedown',e=>{drag=true;pm=[e.clientX,e.clientY];vp.style.cursor='grabbing';});
+  window.addEventListener('mouseup',()=>{drag=false;vp.style.cursor='grab';});
+  window.addEventListener('mousemove',e=>{if(!drag)return;grp.rotation.y+=(e.clientX-pm[0])*.007;grp.rotation.x+=(e.clientY-pm[1])*.007;pm=[e.clientX,e.clientY];});
+  cv.addEventListener('wheel',e=>{cam.position.multiplyScalar(1+e.deltaY*.001);},{passive:true});
+
+  (function loop(){S.T.aid=requestAnimationFrame(loop);if(S.rot)grp.rotation.y+=S.rs*.004;rdr.render(scene,cam);})();
 }
 
-// ── legend & info ─────────────────────────────────────────────────────────────
-function buildLegend(){
-  const present=[...new Set(Array.from(S.mask))].filter(v=>v>0).sort((a,b)=>a-b);
-  document.getElementById('legend').innerHTML=present.map(v=>{
-    const c=CLR[v]||[200,200,200];
-    return `<div class="li"><div class="ls" style="background:rgb(${c[0]},${c[1]},${c[2]})"></div><span>${NAMES[v]||'cls'+v} (${v})</span></div>`;
+// legend
+function buildLgd(){
+  document.getElementById('lgd').innerHTML=S.md.classes.map(c=>{
+    const col=CLR[c.cls]||[200,200,200];
+    return `<div class="li" id="li${c.cls}" onclick="togCls(${c.cls})"><div class="lc" style="background:rgb(${col[0]},${col[1]},${col[2]})"></div><span>${c.name}</span></div>`;
   }).join('');
 }
-function buildVInfo(fname){
-  const [Z,Y,X]=S.dims,[sz,sy,sx]=S.sp;
-  document.getElementById('vinfo').innerHTML=`
-    <div class="mr"><span class="ml">File</span><span class="mv" style="font-size:9px">${fname}</span></div>
-    <div class="mr"><span class="ml">Z×Y×X</span><span class="mv">${Z}×${Y}×${X}</span></div>
-    <div class="mr"><span class="ml">Spacing</span><span class="mv">${sz.toFixed(2)}×${sy.toFixed(2)}×${sx.toFixed(2)} mm</span></div>
-    <div class="mr"><span class="ml">Voxels</span><span class="mv">${(X*Y*Z/1e6).toFixed(1)}M</span></div>`;
+function togCls(cls){
+  const m=S.T.meshes[cls];if(!m)return;
+  const el=document.getElementById(`li${cls}`);
+  if(S.hidden.has(cls)){S.hidden.delete(cls);m.visible=true;el.classList.remove('off');}
+  else{S.hidden.add(cls);m.visible=false;el.classList.add('off');}
 }
-function buildMInfo(){
+function buildInf(fn){
+  const[Z,Y,X]=S.dims,[sz,sy,sx]=S.sp;
   const present=[...new Set(Array.from(S.mask))].filter(v=>v>0);
-  document.getElementById('minfo').innerHTML=`
-    <div class="mr"><span class="ml">Labels predicted</span><span class="mv">${present.length}</span></div>
-    <div class="mr"><span class="ml">IDs</span><span class="mv" style="font-size:9px">${present.slice(0,14).join(', ')}${present.length>14?'…':''}</span></div>
-    <div class="mr"><span class="ml">Model</span><span class="mv">nnUNet 3D</span></div>
-    <div class="mr"><span class="ml">Val Dice</span><span class="mv">0.3393</span></div>`;
+  document.getElementById('inf').innerHTML=`
+    <div class="mi"><span class="mk">File</span><span class="mv" style="font-size:9px">${fn}</span></div>
+    <div class="mi"><span class="mk">Z×Y×X</span><span class="mv">${Z}×${Y}×${X}</span></div>
+    <div class="mi"><span class="mk">Spacing</span><span class="mv">${sz.toFixed(2)}³ mm</span></div>
+    <div class="mi"><span class="mk">Labels</span><span class="mv">${present.length} classes</span></div>`;
+  document.getElementById('ses').innerHTML=`
+    <div class="mi"><span class="mk">Model</span><span class="mv">nnUNet 3D</span></div>
+    <div class="mi"><span class="mk">Val Dice</span><span class="mv">0.3393</span></div>
+    <div class="mi"><span class="mk">Epochs</span><span class="mv">70</span></div>
+    <div class="mi"><span class="mk">Dataset</span><span class="mv">ToothFairy2</span></div>`;
 }
 
-// ── 3D ────────────────────────────────────────────────────────────────────────
-function toggle3d(){
-  if(!S.loaded){alert('Load files first.');return;}
-  const btn=document.getElementById('btn3d');
-  if(S.show3d){
-    S.show3d=false; btn.classList.remove('on'); btn.textContent='Generate 3D Surface';
-    if(S.three.aid)cancelAnimationFrame(S.three.aid);
-    if(S.three.rdr){S.three.rdr.dispose();S.three.rdr=null;}
-    const cv=document.getElementById('cv3d'); cv.width=1;cv.height=1; return;
-  }
-  S.show3d=true; btn.classList.add('on'); btn.textContent='Hide 3D';
-  build3d();
-}
-function build3d(){
-  const vp=document.getElementById('vp3d'), cv=document.getElementById('cv3d');
-  const W=vp.clientWidth, H=vp.clientHeight;
-  const rdr=new THREE.WebGLRenderer({canvas:cv,antialias:true});
-  rdr.setSize(W,H); rdr.setClearColor(0x0d0f18,1); S.three.rdr=rdr;
-  const scene=new THREE.Scene();
-  const cam=new THREE.PerspectiveCamera(45,W/H,0.1,5000); S.three.cam=cam;
-  scene.add(new THREE.AmbientLight(0xffffff,0.7));
-  const dl=new THREE.DirectionalLight(0xffffff,0.8); dl.position.set(1,2,1); scene.add(dl);
-
-  const [Z,Y,X]=S.dims;
-  const STEP=Math.max(1,Math.floor(Math.min(Z,Y,X)/65));
-  const byClass={};
-  for(let z=0;z<Z;z+=STEP) for(let y=0;y<Y;y+=STEP) for(let x=0;x<X;x+=STEP){
-    const m=S.mask[vi(z,y,x)]; if(m<=0)continue;
-    if(!byClass[m])byClass[m]=[];
-    byClass[m].push((x-X/2)*S.sp[2],-(y-Y/2)*S.sp[1],-(z-Z/2)*S.sp[0]);
-  }
-  const grp=new THREE.Group();
-  Object.entries(byClass).forEach(([cls,pts])=>{
-    const c=CLR[+cls]||[200,200,200];
-    const geo=new THREE.BufferGeometry();
-    geo.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
-    grp.add(new THREE.Points(geo,new THREE.PointsMaterial({
-      color:new THREE.Color(c[0]/255,c[1]/255,c[2]/255),size:STEP*0.4,sizeAttenuation:true})));
-  });
-  scene.add(grp); S.three.grp=grp;
-  const maxDim=Math.max(X*S.sp[2],Y*S.sp[1],Z*S.sp[0]);
-  cam.position.set(0,0,maxDim*1.5); cam.lookAt(0,0,0);
-
-  let drag=false,pm=[0,0];
-  cv.addEventListener('mousedown',e=>{drag=true;pm=[e.clientX,e.clientY];});
-  window.addEventListener('mouseup',()=>drag=false);
-  window.addEventListener('mousemove',e=>{
-    if(!drag)return;
-    grp.rotation.y+=(e.clientX-pm[0])*0.008;
-    grp.rotation.x+=(e.clientY-pm[1])*0.008;
-    pm=[e.clientX,e.clientY];
-  });
-  cv.addEventListener('wheel',e=>{cam.position.z=Math.max(20,cam.position.z+e.deltaY*0.4);},{passive:true});
-
-  (function animate(){
-    S.three.aid=requestAnimationFrame(animate);
-    if(S.rspd>0)grp.rotation.y+=S.rspd*0.003;
-    rdr.render(scene,cam);
-  })();
-}
+// controls
+[0,1,2].forEach(i=>{
+  document.getElementById(`sl${i}`).oninput=e=>{S.sl[i]=+e.target.value;document.getElementById(`sv${i}`).textContent=S.sl[i];drawSlice(i);};
+  document.getElementById(`vp${i}`).addEventListener('wheel',e=>{
+    if(!S.loaded)return;e.preventDefault();
+    S.sl[i]=Math.max(0,Math.min(S.dims[i]-1,S.sl[i]+(e.deltaY>0?1:-1)));
+    document.getElementById(`sl${i}`).value=S.sl[i];document.getElementById(`sv${i}`).textContent=S.sl[i];drawSlice(i);
+  },{passive:false});
+});
+document.getElementById('ma').oninput=e=>{S.alpha=e.target.value/100;document.getElementById('mav').textContent=e.target.value+'%';renderAll();};
+document.getElementById('ww').oninput=e=>{S.ww=+e.target.value;document.getElementById('wwv').textContent=S.ww;renderAll();};
+document.getElementById('wl').oninput=e=>{S.wl=+e.target.value;document.getElementById('wlv').textContent=S.wl;renderAll();};
+document.getElementById('op').oninput=e=>{S.op=e.target.value/100;document.getElementById('opv').textContent=e.target.value+'%';Object.values(S.T.meshes).forEach(m=>m.material.opacity=S.op);};
+document.getElementById('rs').oninput=e=>{S.rs=+e.target.value;document.getElementById('rsv').textContent=S.rs;};
+function togL(w){if(w==='scan'){S.showScan=!S.showScan;document.getElementById('tsc').classList.toggle('on',S.showScan);}else{S.showMask=!S.showMask;document.getElementById('tmk').classList.toggle('on',S.showMask);}renderAll();}
+function togWire(){S.wire=!S.wire;document.getElementById('twr').textContent=S.wire?'Wireframe':'Solid';document.getElementById('twr').classList.toggle('on',!S.wire);Object.values(S.T.meshes).forEach(m=>m.material.wireframe=S.wire);}
+function togRot(){S.rot=!S.rot;document.getElementById('trt').classList.toggle('on',S.rot);}
 
 window.addEventListener('resize',()=>{
   if(S.loaded)renderAll();
-  if(S.three.rdr){
-    const vp=document.getElementById('vp3d');
-    S.three.rdr.setSize(vp.clientWidth,vp.clientHeight);
-    S.three.cam.aspect=vp.clientWidth/vp.clientHeight;
-    S.three.cam.updateProjectionMatrix();
-  }
+  if(S.T.rdr){const vp=document.getElementById('vp3d'),r=vp.getBoundingClientRect();S.T.rdr.setSize(r.width,r.height,false);S.T.cam.aspect=r.width/r.height;S.T.cam.updateProjectionMatrix();}
 });
 </script>
 </body>

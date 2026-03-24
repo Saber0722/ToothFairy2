@@ -8,6 +8,8 @@ dependencies = [
     "itk-io>=5.4.5",
     "itk-registration>=5.4.5",
     "itk-segmentation>=5.4.5",
+    "scikit-image>=0.26.0",
+    "scipy>=1.17.1",
 ]
 [tool.uv]
 package = true
